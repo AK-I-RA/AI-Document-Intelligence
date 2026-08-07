@@ -1,0 +1,10 @@
+venv/
+.env
+__pycache__/
+*.pyc
+.chroma/
+*.sqlite3
+.streamlit/secrets.toml
+data/logs/
+data/metrics/
+data/reports/

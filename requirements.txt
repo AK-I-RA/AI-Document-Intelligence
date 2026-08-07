@@ -1,0 +1,21 @@
+#phase 1
+streamlit>=1.35.0
+openai>=1.30.0
+pinecone>=3.2.0
+python-dotenv>=1.0.0
+tiktoken>=0.7.0
+
+#phase 2
+celery
+redis
+
+#phase 3
+# Note: the original 0.1.21/0.0.8/0.0.38/2.14.0/12.0.1 pins predate Python 3.13
+# wheel availability (pyarrow==12.0.1 and its numpy chain fail to build). These
+# newer versions work with ragas_eval.py's langchain_community.chat_models.vertexai
+# shim, which papers over an unrelated upstream removal in langchain-community.
+ragas>=0.4.3
+langchain-openai>=1.4.1
+langchain-community>=0.4.2
+datasets>=5.0.1
+numpy>=1.26.0

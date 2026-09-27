@@ -2,6 +2,8 @@
 
 **Ask your PDFs anything and get answers cited to the page.**
 
+**[Try the live demo →](https://ai-document-intelligence-jyvkmfhhbkserfynzuwrkq.streamlit.app/)**
+
 DocuMind is a retrieval-augmented generation (RAG) app for question answering over your own documents. Upload a PDF, ask a question in plain language, and get an answer grounded only in that document, with the exact pages it came from.
 
 ![DocuMind landing page](docs/screenshots/landing.png)

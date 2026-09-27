@@ -30,6 +30,11 @@ def ingest_task(
             meta={"step": step, "pct": round(pct, 2)},
         )
 
+    # Let exceptions propagate: Celery records FAILURE itself. Setting FAILURE
+    # manually with a plain dict meta crashes the worker (missing exc_type).
+    if not pdf_path.exists():
+        raise FileNotFoundError(f"Uploaded file no longer exists: {pdf_path}")
+
     try:
         progress("Extracting & chunking pdf...", 0.10)
         chunks = ingest_pdf(pdf_path, chunk_size, chunk_overlap)
@@ -41,19 +46,17 @@ def ingest_task(
         upsert_chunks(chunks, embeddings)
 
         progress("Done.", 1.0)
+    finally:
+        try:
+            pdf_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
-        pages = sorted(set(c.page_num for c in chunks))
-        return {
-            "status": "success",
-            "doc_name": pdf_path.stem,
-            "chunk_count": len(chunks),
-            "page_count": len(pages),
-            "total_tokens": sum(c.token_count for c in chunks),
-        }
-
-    except Exception as exc:
-        self.update_state(
-            state="FAILURE",
-            meta={"step": "error", "pct": 0, "error": str(exc)},
-        )
-        raise exc
+    pages = sorted(set(c.page_num for c in chunks))
+    return {
+        "status": "success",
+        "doc_name": pdf_path.stem,
+        "chunk_count": len(chunks),
+        "page_count": len(pages),
+        "total_tokens": sum(c.token_count for c in chunks),
+    }

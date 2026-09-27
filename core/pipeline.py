@@ -120,6 +120,13 @@ def submit_ingest_job(
     return _submit(str(pdf_path), chunk_size, chunk_overlap)
 
 
+def workers_online() -> bool:
+    if not async_available():
+        return False
+    from phases.phase2_async.job_status import workers_online as _online
+    return _online()
+
+
 def get_ingest_status(job_id: str):
     from phases.phase2_async.job_status import get_job_status
     return get_job_status(job_id)

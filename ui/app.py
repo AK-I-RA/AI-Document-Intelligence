@@ -9,6 +9,36 @@ import streamlit as st
 
 st.set_page_config(page_title="DocuMind", page_icon="D", layout="wide")
 
+# landing page is shown first; its buttons link to "?view=app"
+if st.query_params.get("view") != "app":
+    from ui.landing import render_landing
+    render_landing()
+    st.stop()
+
+# a question typed into the landing page's ask box arrives as "?view=app&q=..."
+if st.query_params.get("q"):
+    st.session_state.pending_q = st.query_params["q"]
+    del st.query_params["q"]
+
+from ui.brand import LOGO_CSS, greeting, mark
+
+st.html(LOGO_CSS + """
+<style>
+.hello { display: flex; align-items: center; justify-content: center; gap: 14px; text-align: center;
+         font-size: clamp(26px, 3vw, 34px); font-weight: 400; letter-spacing: -0.02em;
+         color: #3F2F1E; margin: 14vh 0 26px; }
+[data-testid="stChatInput"] > div {
+    background: #FFFFFF !important; border-radius: 28px !important; padding: 4px 6px !important;
+    border: 1px solid rgba(63, 47, 30, 0.10) !important; box-shadow: 0 10px 40px rgba(63, 47, 30, 0.10);
+    transition: box-shadow .3s ease;
+}
+[data-testid="stChatInput"] > div:focus-within { box-shadow: 0 14px 48px rgba(255, 74, 28, 0.18); }
+[data-testid="stChatInput"] textarea { background: transparent !important; font-size: 16px !important; }
+[data-testid="stChatInputSubmitButton"] { background: #3F2F1E !important; color: #FFFFFF !important; border-radius: 50% !important; }
+[data-testid="stChatInputSubmitButton"]:hover { background: #FF4A1C !important; }
+</style>
+""")
+
 # env + phase detection
 missing = [k for k in ["PINECONE_API_KEY"] if not os.getenv(k)]
 if missing:
@@ -31,7 +61,12 @@ except Exception:
 
 # sidebar
 with st.sidebar:
-    st.markdown("# DocuMind")
+    st.html(
+        "<div class='dm-logo' style='font-weight:600;font-size:15px;letter-spacing:.22em;"
+        f"padding:.25rem 0'>{mark(26)}DOCUMIND</div>"
+    )
+    st.button("← Home", key="go_home", width="stretch",
+              on_click=lambda: st.query_params.pop("view", None))
     st.divider()
 
     st.caption("CHUNKING")
@@ -59,44 +94,18 @@ if "jobs" not in st.session_state:
     st.session_state.jobs = []
 
 
-def ingest_uploaded_pdf(uploaded_file):
-    tmp_dir = tempfile.mkdtemp()
-    tmp_path = os.path.join(tmp_dir, uploaded_file.name)
-    with open(tmp_path, "wb") as tmp:
-        tmp.write(uploaded_file.read())
+from ui.workflow import worker_available, ingest, summary
 
-    if ASYNC:
-        from core.pipeline import submit_ingest_job
-        try:
-            with st.spinner("Submitting job..."):
-                job_id = submit_ingest_job(tmp_path, chunk_size, chunk_overlap)
-            st.success("Job submitted!")
-            st.code(job_id)
-            st.caption("Track progress in Job Queue tab")
-            st.session_state.jobs.insert(0, {"job_id": job_id, "filename": uploaded_file.name})
-        except Exception as e:
-            st.error(e)
-    else:
-        from core.pipeline import ingest_document
-        pb, cap = st.progress(0), st.empty()
-        try:
-            r = ingest_document(
-                tmp_path, chunk_size, chunk_overlap,
-                lambda step, pct=None: (
-                    pb.progress(pct) if pct is not None else None,
-                    cap.caption(step),
-                ),
-            )
-            if r.status == "error":
-                st.error(r.error)
-            else:
-                st.success(f"Ingested: {r.doc_name}")
-                st.caption(f"{r.chunk_count} chunks - {r.page_count} pages - {r.total_tokens:,} tokens")
-        except Exception as e:
-            st.error(e)
-        finally:
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
+
+def ingest_uploaded_pdf(uploaded_file) -> str:
+    """Ingest a PDF, showing live progress; returns a one-line summary for the chat."""
+    pb, cap = st.progress(0), st.empty()
+    doc = ingest(uploaded_file, chunk_size, chunk_overlap,
+                 lambda step, pct=None: (pb.progress(pct) if pct is not None else None, cap.caption(step)))
+    pb.empty(), cap.empty()
+    if doc["status"] == "indexing":
+        return f"Queued **{doc['name']}** for indexing. Track it in the Job Queue tab."
+    return summary(doc)
 
 
 def stat_cards(items):
@@ -117,73 +126,79 @@ tab_main, tab_jobs, tab_eval, tab_dash, tab_docs = st.tabs(
 
 # ASK
 with tab_main:
-    left, right = st.columns(2, gap="large")
+    # ChatGPT-style thread; kept in session state so it survives reruns from other tabs' Refresh buttons
+    if "chat" not in st.session_state:
+        st.session_state.chat = []
 
-    with left:
-        st.markdown("**Upload**")
-        uploaded = st.file_uploader("Upload PDF", type=["pdf"], label_visibility="collapsed")
+    def render_sources(sources):
+        if not sources:
+            return
+        with st.expander(f"Sources · {len(sources)} chunks"):
+            for i, c in enumerate(sources, 1):
+                pct = int(c["score"] * 100)
+                st.caption(f"#{i} · {c['doc_name']} · p.{c['page_num']} · {pct}% match")
+                st.markdown(c["text"][:400] + ("..." if len(c["text"]) > 400 else ""))
 
-        if uploaded and st.button("Ingest document", use_container_width=True):
-            ingest_uploaded_pdf(uploaded)
-        elif not uploaded:
-            stat_cards([
-                (chunk_size, "CHUNK SIZE"),
-                (chunk_overlap, "OVERLAP"),
-                (top_k, "TOP-K"),
-            ])
+    thread = st.container()
+    with thread:
+        hello = st.empty()
+        if not st.session_state.chat:
+            hello.html(f"<div class='hello'>{mark(32)}{greeting()}</div>")
+        for turn in st.session_state.chat:
+            with st.chat_message("user"):
+                st.markdown(turn["q"])
+            with st.chat_message("assistant"):
+                st.markdown(turn["a"])
+                render_sources(turn.get("sources"))
 
-    with right:
-        st.markdown("**Question**")
-        question = st.text_area("Question", placeholder="What is the refund policy?",
-                                height=120, label_visibility="collapsed")
-        col1, col2 = st.columns([2, 1])
-        show_chunks = col2.toggle("Sources", value=True)
-        ask         = col1.button("Ask", use_container_width=True)
+    prompt = st.chat_input("Ask anything, or upload a PDF",
+                           accept_file="multiple", file_type=["pdf"], key="ask_box")
 
-        def render_sources(sources):
-            if show_chunks and sources:
-                st.divider()
-                st.caption(f"SOURCES - {len(sources)} chunks")
-                for i, c in enumerate(sources, 1):
-                    pct = int(c["score"] * 100)
-                    st.caption(f"#{i} - {c['doc_name']} - p.{c['page_num']} - {pct}% match")
-                    st.markdown(c["text"][:400] + ("..." if len(c["text"]) > 400 else ""))
-                    st.divider()
-            elif not sources:
-                st.caption("No chunks found - ingest a document first.")
+    # a question and/or PDFs may also arrive from the landing page's input
+    pending_q = st.session_state.pop("pending_q", None) or ""
+    pending_files = st.session_state.pop("pending_files", [])
+    if prompt:
+        question, files = prompt.text or "", prompt.files
+    else:
+        question, files = pending_q, pending_files
 
-        if ask:
-            if not question.strip():
-                st.warning("Enter a question.")
-            else:
+    if files or question.strip():
+        hello.empty()
+
+    with thread:
+        for f in files:
+            with st.chat_message("user"):
+                st.markdown(f"Added **{f.name}**")
+            with st.chat_message("assistant"):
+                summary = ingest_uploaded_pdf(f)
+                st.markdown(summary)
+            st.session_state.chat.append({"q": f"Added **{f.name}**", "a": summary})
+
+        if question.strip():
+            with st.chat_message("user"):
+                st.markdown(question)
+            with st.chat_message("assistant"):
                 try:
                     from core.pipeline import query_document
                     with st.spinner("Searching..."):
                         gen, sources = query_document(question=question, top_k=top_k, stream=True)
-                    st.markdown("**Answer**")
                     answer = st.write_stream(gen)
-                    st.session_state.last_answer = answer
-                    st.session_state.last_sources = sources
 
                     if P3:
                         try:
                             from phases.phase3_hard.cache import SemanticCache
                             cs = SemanticCache().get_stats()
                             if cs["total"] > 0:
-                                st.caption(f"Cache: {cs['hits']} hits / {cs['total']} - {cs['hit_rate']}% hit rate")
+                                st.caption(f"Cache: {cs['hits']} hits / {cs['total']} · {cs['hit_rate']}% hit rate")
                         except Exception:
                             pass
 
+                    if not sources:
+                        st.caption("No matching chunks. Add a PDF with + first.")
                     render_sources(sources)
+                    st.session_state.chat.append({"q": question, "a": answer, "sources": sources})
                 except Exception as e:
-                    st.session_state.pop("last_answer", None)
                     st.error(e)
-        elif st.session_state.get("last_answer") is not None:
-            # Re-render the previous answer so it survives reruns triggered
-            # by other tabs' Refresh buttons (st.rerun() re-executes this whole script).
-            st.markdown("**Answer**")
-            st.write(st.session_state.last_answer)
-            render_sources(st.session_state.get("last_sources"))
 
 # JOB QUEUE
 with tab_jobs:
@@ -194,6 +209,9 @@ with tab_jobs:
     else:
         if st.button("Refresh", key="refresh_jobs"):
             st.rerun()
+        if not worker_available():
+            st.warning("No Celery worker is running, so queued jobs stay PENDING. Start one in a new terminal:")
+            st.code("celery -A phases.phase2_async.worker worker --loglevel=info --pool=solo")
         jobs = st.session_state.jobs
         if not jobs:
             st.caption("No jobs yet.")

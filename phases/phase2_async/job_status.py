@@ -12,6 +12,14 @@ class JobStatus:
     result: dict | None = None
     error: str = ""
 
+def workers_online(timeout: float = 1.0) -> bool:
+    from phases.phase2_async.worker import celery_app
+    try:
+        return bool(celery_app.control.ping(timeout=timeout))
+    except Exception:
+        return False
+
+
 def submit_ingest_job(
     pdf_path: str,
     chunk_size: int = 400,
@@ -23,7 +31,8 @@ def submit_ingest_job(
 
 
 def get_job_status(job_id: str) -> JobStatus:
-    ar = AsyncResult(job_id)
+    from phases.phase2_async.worker import celery_app
+    ar = AsyncResult(job_id, app=celery_app)
     state = ar.state
 
     if state == "PROGRESS":

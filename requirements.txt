@@ -1,21 +1,26 @@
-#phase 1
-streamlit>=1.35.0
-openai>=1.30.0
-pinecone>=3.2.0
-python-dotenv>=1.0.0
-tiktoken>=0.7.0
+# Tested with Python 3.13. Minimum versions match the environment the project was built in.
 
-#phase 2
-celery
-redis
+# --- Core RAG (Phase 1) ---
+streamlit>=1.60.0             # UI; needs chat_input file uploads and st.html
+pypdf>=6.14.2                 # PDF text extraction
+tiktoken>=0.13.0              # token-based chunking and token counts
+sentence-transformers>=5.6.0  # local embeddings (all-MiniLM-L6-v2, 384 dims); installs torch
+pinecone>=9.1.0               # vector store (serverless index)
+openai>=2.46.0                # OpenAI-compatible client, used to talk to Ollama for answers
+python-dotenv>=1.2.2          # loads settings from .env
+numpy>=1.26.0
 
-#phase 3
-# Note: the original 0.1.21/0.0.8/0.0.38/2.14.0/12.0.1 pins predate Python 3.13
-# wheel availability (pyarrow==12.0.1 and its numpy chain fail to build). These
-# newer versions work with ragas_eval.py's langchain_community.chat_models.vertexai
-# shim, which papers over an unrelated upstream removal in langchain-community.
+# --- Background ingestion (Phase 2) ---
+celery>=5.6.3
+redis>=8.0.1                  # also backs the semantic cache in Phase 3
+
+# --- Guardrails, cache and evaluation (Phase 3) ---
+# The original ragas 0.1.x / pyarrow 12 pins predate Python 3.13 wheels; these newer versions
+# work with ragas_eval.py's langchain_community.chat_models.vertexai shim.
 ragas>=0.4.3
 langchain-openai>=1.4.1
 langchain-community>=0.4.2
 datasets>=5.0.1
-numpy>=1.26.0
+
+# --- Observability dashboard (Phase 4) ---
+pandas>=3.0.3

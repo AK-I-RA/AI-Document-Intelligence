@@ -41,7 +41,8 @@ def generate_answer(
     stream: bool = True,
     model: str = LLM_MODEL,
 ) -> str | Generator[str, None, None]:
-    client = OpenAI(base_url=LLM_BASE_URL, api_key="ollama")
+    # Ollama ignores the key; hosted OpenAI-compatible APIs (e.g. Groq) need a real one
+    client = OpenAI(base_url=LLM_BASE_URL, api_key=os.getenv("LLM_API_KEY", "ollama"))
 
     if not retrieved_chunks:
         msg = "I could not find relevant passages."

@@ -79,6 +79,8 @@ Copy `.env.example` to `.env` and fill in your values:
 | `PINECONE_API_KEY` | Yes | Pinecone access |
 | `PINECONE_INDEX_NAME`, `PINECONE_CLOUD`, `PINECONE_REGION` | No | Index settings (default `documind`, `aws`, `us-east-1`) |
 | `LLM_BASE_URL`, `LLM_MODEL` | No | Answer model endpoint (default local Ollama, `llama3.2`) |
+| `LLM_API_KEY` | No | Key for a hosted OpenAI-compatible API such as Groq |
+| `DEMO_MODE` | No | Set to `1` on a public deployment to hide the Dashboard |
 | `REDIS_URL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` | No | Enable background indexing and caching |
 | `OFFTOPIC_SCORE_THRESHOLD`, `CACHE_SIMILARITY_THRESHOLD` | No | Tuning (defaults `0.35`, `0.92`) |
 | `OPENAI_API_KEY` | No | RAGAS evaluation only |
@@ -98,6 +100,24 @@ celery -A phases.phase2_async.worker worker --loglevel=info --pool=solo
 ```
 
 `--pool=solo` is needed on Windows. Without a worker, uploads are simply indexed inline.
+
+## Deploy for free
+
+DocuMind runs on [Streamlit Community Cloud](https://share.streamlit.io). A hosted server can't reach a local Ollama, so point it at a free OpenAI-compatible API such as [Groq](https://console.groq.com) instead. Background indexing is skipped there (no Redis), and PDFs are indexed inline.
+
+1. Create a free Groq API key, and use a separate Pinecone index name for the public demo.
+2. On share.streamlit.io, click **Create app** and pick this repo, branch `main`, main file `ui/app.py`. Under **Advanced settings**, choose Python 3.13 and paste your secrets:
+
+   ```toml
+   PINECONE_API_KEY = "your-pinecone-api-key"
+   PINECONE_INDEX_NAME = "documind-demo"
+   LLM_BASE_URL = "https://api.groq.com/openai/v1"
+   LLM_MODEL = "llama-3.1-8b-instant"
+   LLM_API_KEY = "your-groq-api-key"
+   DEMO_MODE = "1"
+   ```
+
+3. Deploy. The first build takes a few minutes while dependencies and the embedding model download.
 
 ## Using the app
 

@@ -9,8 +9,11 @@ import streamlit as st
 
 st.set_page_config(page_title="DocuMind", page_icon="D", layout="wide")
 
-# landing page is shown first; its buttons link to "?view=app"
-if st.query_params.get("view") != "app":
+# The landing page is the search workspace; "?view=app" opens the Dashboard.
+# DEMO_MODE (for a public deployment) keeps visitors on the workspace, so they
+# can't remove indexed documents or browse metrics.
+DEMO_MODE = os.getenv("DEMO_MODE", "").lower() in ("1", "true", "yes")
+if DEMO_MODE or st.query_params.get("view") != "app":
     from ui.landing import render_landing
     render_landing()
     st.stop()

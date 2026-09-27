@@ -1,5 +1,10 @@
 # Tested with Python 3.13. Minimum versions match the environment the project was built in.
 
+# CPU-only PyTorch (for sentence-transformers): avoids ~2 GB of CUDA libraries on Linux
+# hosts such as Streamlit Community Cloud. Remove this line if you want GPU embeddings.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+
 # --- Core RAG (Phase 1) ---
 streamlit>=1.60.0             # UI; needs chat_input file uploads and st.html
 pypdf>=6.14.2                 # PDF text extraction

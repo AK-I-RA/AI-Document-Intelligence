@@ -4,6 +4,7 @@ Idle: logo ring, greeting, search bar, settings. After a search or upload the sa
 switches to a conversation, with the search bar and settings staying below it.
 """
 import html
+import os
 
 import streamlit as st
 
@@ -131,10 +132,12 @@ ASSISTANT_AVATAR = ":material/blur_circular:"
 
 def _topbar(active: bool) -> str:
     new = '<a class="ghost" href="?">New search</a>' if active else ""
+    demo = os.getenv("DEMO_MODE", "").lower() in ("1", "true", "yes")
+    dashboard = "" if demo else f'<a class="ghost" href="{DASHBOARD_LINK}">Dashboard</a>'
     return f"""
   <div class="topbar">
     <a class="dm-logo brand fade" href="?">{mark(26)}DOCUMIND</a>
-    <div class="links fade" style="--d:.1s">{new}<a class="ghost" href="{DASHBOARD_LINK}">Dashboard</a></div>
+    <div class="links fade" style="--d:.1s">{new}{dashboard}</div>
   </div>"""
 
 
